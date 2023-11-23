@@ -78,6 +78,7 @@ fn tokenize(chapters: &Vec<String>) -> Vec<Vec<String>> {
             chapter
                 .split_whitespace()
                 .map(|token| token.trim_matches(|c| !char::is_alphabetic(c)))
+                .filter(|token| !token.is_empty())
                 .map(|token| String::from(token))
                 .collect(),
         );
@@ -88,7 +89,7 @@ fn tokenize(chapters: &Vec<String>) -> Vec<Vec<String>> {
 
 fn calculate_term_density(tokenized_chapter: &Vec<String>, terms: &Vec<&str>) -> f32 {
     calculate_term_count(tokenized_chapter, terms) as f32
-        / (calculate_token_count(tokenized_chapter) as f32
+        / (tokenized_chapter.len() as f32
             * calculate_avg_nearest_term_dist(tokenized_chapter, terms))
 }
 
@@ -102,10 +103,6 @@ fn calculate_term_count(tokenized_chapter: &Vec<String>, terms: &Vec<&str>) -> u
     }
 
     term_count
-}
-
-fn calculate_token_count(tokenized_chapter: &Vec<String>) -> usize {
-    tokenized_chapter.len()
 }
 
 fn calculate_avg_nearest_term_dist(tokenized_chapter: &Vec<String>, terms: &Vec<&str>) -> f32 {
@@ -162,6 +159,21 @@ mod tests {
     }
 
     #[test]
+    fn should_chapterize_book_correctly() {
+        let book = "\
+Before chapter.
+CHAPTER 1
+Content 1
+CHAPTER 2
+Content 2
+**** END OF THE PROJECT GUTENBERG EBOOK, WAR AND PEACE ****
+After book end.";
+        let chapters = chapterize(book);
+        let expected = vec!["CHAPTER 1 Content 1", "CHAPTER 2 Content 2"];
+        assert_eq!(chapters, expected);
+    }
+
+    #[test]
     fn line_should_end_book() {
         let line = "**** END OF THE PROJECT GUTENBERG EBOOK, WAR AND PEACE ****";
         let result = is_book_end(line);
@@ -187,5 +199,105 @@ mod tests {
         let line = "chapter 1";
         let result = is_chapter_start(line);
         assert_eq!(result, false);
+    }
+
+    #[test]
+    fn should_tokenize_chapters_correctly() {
+        let book = "\
+Before chapter.
+CHAPTER 1
+Content 1
+CHAPTER 2
+Content 2
+**** END OF THE PROJECT GUTENBERG EBOOK, WAR AND PEACE ****
+After book end.";
+        let chapters = chapterize(book);
+        let tokenized_chapters = tokenize(&chapters);
+        let expected = vec![vec!["CHAPTER", "Content"], vec!["CHAPTER", "Content"]];
+        assert_eq!(tokenized_chapters, expected);
+    }
+
+    #[test]
+    fn calculate_term_density_should_return_1() {
+        let tokenized_chapter = vec![String::from("foo")];
+        let terms = vec!["foo"];
+        let term_density = calculate_term_density(&tokenized_chapter, &terms);
+        assert!((term_density - 1.0).abs() <= 0.001);
+    }
+
+    #[test]
+    fn calculate_term_density_should_return_0() {
+        let tokenized_chapter = vec![String::from("bar")];
+        let terms = vec!["foo"];
+        let term_density = calculate_term_density(&tokenized_chapter, &terms);
+        assert!((term_density - 0.0).abs() <= 0.001);
+    }
+
+    #[test]
+    fn calculate_term_density_should_return_0p5() {
+        let tokenized_chapter = vec![
+            String::from("foo"),
+            String::from("bar"),
+            String::from("fo"),
+            String::from("baar"),
+        ];
+        let terms = vec!["foo", "fo"];
+        let term_density = calculate_term_density(&tokenized_chapter, &terms);
+        println!("{term_density}");
+        assert!((term_density - 0.5).abs() <= 0.001);
+    }
+
+    #[test]
+    fn calculate_term_count_should_return_1() {
+        let tokenized_chapter = vec![
+            String::from("foo"),
+            String::from("bar"),
+            String::from("fo"),
+            String::from("baar"),
+        ];
+        let terms = vec!["foo"];
+        let term_count = calculate_term_count(&tokenized_chapter, &terms);
+        assert_eq!(term_count, 1);
+    }
+
+    #[test]
+    fn calculate_term_count_should_return_0() {
+        let tokenized_chapter = vec![
+            String::from("bar"),
+            String::from("fo"),
+            String::from("baar"),
+        ];
+        let terms = vec!["foo"];
+        let term_count = calculate_term_count(&tokenized_chapter, &terms);
+        assert_eq!(term_count, 0);
+    }
+
+    #[test]
+    fn calculate_nearest_term_dist_should_return_1() {
+        let tokenized_chapter = vec![String::from("bar")];
+        let terms = vec!["bar"];
+        let avg_nearest_term_dist = calculate_avg_nearest_term_dist(&tokenized_chapter, &terms);
+        assert!((avg_nearest_term_dist - 1.0).abs() <= 0.001);
+    }
+
+    #[test]
+    fn calculate_nearest_term_dist_should_return_1p5() {
+        let tokenized_chapter = vec![
+            String::from("bar"),
+            String::from("foo"),
+            String::from("foo"),
+            String::from("bar"),
+        ];
+        let terms = vec!["bar"];
+        let avg_nearest_term_dist = calculate_avg_nearest_term_dist(&tokenized_chapter, &terms);
+        assert!((avg_nearest_term_dist - 1.5).abs() <= 0.001);
+    }
+
+    #[test]
+    fn calculate_nearest_term_dist_should_return_1_000_000() {
+        let tokenized_chapter = vec![];
+        let terms = vec!["bar"];
+        let avg_nearest_term_dist = calculate_avg_nearest_term_dist(&tokenized_chapter, &terms);
+        assert!((avg_nearest_term_dist - 1_000_000.0).abs() <= 0.001);
     }
 }
